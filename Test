@@ -289,7 +289,7 @@ MinButton.BackgroundTransparency = 1
 MinButton.AnchorPoint = Vector2.new(0.5, 0.5)
 MinButton.Position = UDim2.new(0.5, 0, 0.5, 0)
 MinButton.Size = UDim2.fromOffset(44, 44)
-MinButton.Text = "Ã—"
+MinButton.Text = "X"
 
 -- Restore Button
 local Restore = Instance.new("TextButton", RootContainer)
@@ -1042,7 +1042,9 @@ local function createModule(name, init, toggle, toggleCallback)
     head.LayoutOrder = 1
     applyStyleStroke(head)
     
-    local ind = Instance.new("Frame", frame)
+    head.ClipsDescendants = false
+
+    local ind = Instance.new("Frame", head)
     ind.BackgroundColor3 = WHITE
     ind.BackgroundTransparency = 1
     ind.Size = UDim2.new(0, 2, 0, 32)
@@ -1136,12 +1138,12 @@ local function createModule(name, init, toggle, toggleCallback)
         sett.Size = UDim2.new(1, 0, 0, h)
 
         if open then
-            -- ind lives on frame; span from top of header down through the settings panel
+            -- ind is parented to head; extend downward past head into the settings panel
             ind.Position = UDim2.new(0, 4, 0, 4)
             ind.Size = UDim2.new(0, 2, 0, math.max(0, head.Size.Y.Offset + h - 8))
             ind.BackgroundTransparency = 0
         else
-            -- Collapsed: sit in the middle of the header only, hidden
+            -- Collapsed: span just the header height minus padding, hidden
             ind.Position = UDim2.new(0, 4, 0, 4)
             ind.Size = UDim2.new(0, 2, 0, head.Size.Y.Offset - 8)
             ind.BackgroundTransparency = 1
