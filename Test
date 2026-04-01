@@ -1202,6 +1202,15 @@ local function createModule(name, init, toggle, toggleCallback)
     function api:TextButton(n, c) mark(); createTextButton(n, c).Parent = sett; return api end
     function api:OneTimeButton(n, c) mark(); createOneTimeButton(n, c).Parent = sett; return api end
     
+    -- Allow external callers to permanently open (used by dividers)
+    function api:ForceOpen()
+        open = true
+        hasI = true
+        sett.Visible = true
+        task.defer(applyModuleOpenState)
+        list2:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyModuleOpenState)
+    end
+
     -- Return frame, api, and the toggle function for external use
     return frame, api, setToggleState
 end
@@ -1209,6 +1218,7 @@ end
 local function createDivider(name)
     local f, a = createModule(name, nil, false)
     f.Name = name .. "Divider"
+    task.defer(function() a:ForceOpen() end)
     return f, a
 end
 
