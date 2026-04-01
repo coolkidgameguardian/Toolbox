@@ -1,0 +1,2098 @@
+-- final patch responsive + reopen + module spacing fix
+-- Services
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+-- Platform Detection
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+-- Uncomment to FORCE Mobile Mode for testing in Studio:
+-- IsMobile = true 
+
+-- Fonts & Config
+local okFont, _ = pcall(function() return Enum.Font.FredokaOne end)
+local mainFont = okFont and Enum.Font.FredokaOne or Enum.Font.SourceSansBold
+
+-- Global Settings Variables
+_G.Animations_Enabled = true 
+_G.Fixed_Anim_Speed = 0.3   
+_G.RGB_Speed = 1
+_G.RGB_Enabled = false
+
+-- Global Registry
+_G.ModuleRegistry = {} 
+_G.Keybinds = {}        
+_G.ActiveMobileButtons = {} 
+
+-- Helper to get current speed
+local function getAnimSpeed()
+    return _G.Animations_Enabled and _G.Fixed_Anim_Speed or 0
+end
+
+-- Colors
+local SELECTED_COLOR = Color3.fromRGB(26, 174, 93) -- Green
+local DESELECTED_COLOR = Color3.fromRGB(0, 0, 0) -- Black
+local SELECTED_TEXT_COLOR = Color3.fromRGB(80, 255, 80) -- Green 
+local WHITE = Color3.fromRGB(255, 255, 255)
+local CATEGORY_TEXT_COLOR = WHITE 
+
+-- RGB System
+_G.RGBObjects = {
+	Backgrounds = {}, 
+	Texts = {},        
+	Strokes = {}       
+}
+
+local function RegisterRGB(instance, type, defaultColor)
+	local def = defaultColor or SELECTED_COLOR
+	if type == "Background" then _G.RGBObjects.Backgrounds[instance] = def
+	elseif type == "Text" then _G.RGBObjects.Texts[instance] = def
+	elseif type == "Stroke" then _G.RGBObjects.Strokes[instance] = def
+	end
+end
+
+local function UnregisterRGB(instance, type)
+	if type == "Background" then _G.RGBObjects.Backgrounds[instance] = nil
+	elseif type == "Text" then _G.RGBObjects.Texts[instance] = nil
+	elseif type == "Stroke" then _G.RGBObjects.Strokes[instance] = nil
+	end
+end
+
+-- =========================================================================
+-- 1. GUI SETUP
+-- =========================================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+local ToolboxGui = ScreenGui
+ToolboxGui.Name = "Toolbox"
+ToolboxGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ToolboxGui.DisplayOrder = 10000 
+ToolboxGui.IgnoreGuiInset = false 
+ToolboxGui.Enabled = true
+
+if gethui then
+	ToolboxGui.Parent = gethui()
+elseif syn and syn.protect_gui then 
+	syn.protect_gui(ToolboxGui)
+	ToolboxGui.Parent = CoreGui
+elseif CoreGui:FindFirstChild("RobloxGui") then
+	ToolboxGui.Parent = CoreGui:FindFirstChild("RobloxGui")
+else
+	ToolboxGui.Parent = CoreGui
+end
+
+-- Anti-Duplicate
+if gethui then
+	for _, Interface in ipairs(gethui():GetChildren()) do
+		if Interface.Name == ToolboxGui.Name and Interface ~= ToolboxGui then
+			Interface.Enabled = false
+			Interface.Name = "Toolbox-Old"
+		end
+	end
+else
+	for _, Interface in ipairs(CoreGui:GetChildren()) do
+		if Interface.Name == ToolboxGui.Name and Interface ~= ToolboxGui then
+			Interface.Enabled = false
+			Interface.Name = "Toolbox-Old"
+		end
+	end
+end
+
+CollectionService:AddTag(ToolboxGui, "main")
+
+local MobileOverlay = Instance.new("Frame", ToolboxGui)
+MobileOverlay.Name = "MobileOverlay"
+MobileOverlay.Size = UDim2.new(1, 0, 1, 0)
+MobileOverlay.BackgroundTransparency = 1
+MobileOverlay.Visible = true 
+
+-- Responsive root container so the UI keeps the same look in portrait/landscape
+local DESIGN_WIDTH = 1536
+local DESIGN_HEIGHT = 820
+local EDGE_MARGIN = 12
+
+local RootContainer = Instance.new("Frame", ToolboxGui)
+RootContainer.Name = "RootContainer"
+RootContainer.BackgroundTransparency = 1
+RootContainer.BorderSizePixel = 0
+RootContainer.Size = UDim2.fromOffset(DESIGN_WIDTH, DESIGN_HEIGHT)
+RootContainer.Position = UDim2.fromOffset(EDGE_MARGIN, EDGE_MARGIN)
+
+local RootScale = Instance.new("UIScale", RootContainer)
+RootScale.Scale = 1
+
+local function fitRootToScreen()
+    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+    local safeW = math.max(1, viewport.X - (EDGE_MARGIN * 2))
+    local safeH = math.max(1, viewport.Y - (EDGE_MARGIN * 2))
+    local scale = math.min(safeW / DESIGN_WIDTH, safeH / DESIGN_HEIGHT)
+    RootScale.Scale = scale
+    RootContainer.Position = UDim2.fromOffset(EDGE_MARGIN, EDGE_MARGIN)
+end
+
+fitRootToScreen()
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitRootToScreen)
+end
+
+-- =========================================================================
+-- 2. MAIN UI CONSTRUCTION
+-- =========================================================================
+
+local UI_Elements = {}
+
+-- 2.1 Main Plate
+local MainPlate = Instance.new("Frame", RootContainer)
+MainPlate.BorderSizePixel = 0
+MainPlate.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MainPlate.Size = UDim2.fromOffset(885, 671)
+MainPlate.Position = UDim2.fromOffset(7, 124)
+MainPlate.Name = "Main Plate"
+MainPlate.BackgroundTransparency = 0.5
+Instance.new("UICorner", MainPlate)
+local MainStroke = Instance.new("UIStroke", MainPlate)
+MainStroke.Thickness = 4
+MainStroke.Color = WHITE
+RegisterRGB(MainStroke, "Stroke", WHITE)
+Instance.new("UIAspectRatioConstraint", MainPlate).AspectRatio = 1.42857
+UI_Elements.Main = MainPlate
+
+-- 2.2 Link Plate
+local LinkPlate = Instance.new("Frame", RootContainer)
+LinkPlate.BorderSizePixel = 0
+LinkPlate.BackgroundColor3 = WHITE
+LinkPlate.Size = UDim2.fromOffset(97, 652)
+LinkPlate.Position = UDim2.fromOffset(18, 133)
+LinkPlate.Name = "Link Plate"
+LinkPlate.BackgroundTransparency = 1
+Instance.new("UICorner", LinkPlate)
+local LinkStroke = Instance.new("UIStroke", LinkPlate)
+LinkStroke.Thickness = 4
+LinkStroke.Color = WHITE
+RegisterRGB(LinkStroke, "Stroke", WHITE)
+Instance.new("UIAspectRatioConstraint", LinkPlate).AspectRatio = 0.16176
+UI_Elements.Links = LinkPlate
+
+-- 2.3 Category Plate
+local CatListPlate = Instance.new("Frame", RootContainer)
+CatListPlate.BorderSizePixel = 0
+CatListPlate.BackgroundColor3 = WHITE
+CatListPlate.Size = UDim2.fromOffset(313, 652)
+CatListPlate.Position = UDim2.fromOffset(130, 133)
+CatListPlate.Name = "Category List Plate"
+CatListPlate.BackgroundTransparency = 1
+Instance.new("UICorner", CatListPlate)
+local CatListStroke = Instance.new("UIStroke", CatListPlate)
+CatListStroke.Thickness = 4
+CatListStroke.Color = WHITE
+RegisterRGB(CatListStroke, "Stroke", WHITE)
+Instance.new("UIAspectRatioConstraint", CatListPlate).AspectRatio = 0.51961
+UI_Elements.CatList = CatListPlate
+
+-- 2.4 Module Plate
+local ModulePlate = Instance.new("Frame", RootContainer)
+ModulePlate.BorderSizePixel = 0
+ModulePlate.BackgroundColor3 = WHITE
+ModulePlate.Size = UDim2.fromOffset(425, 652)
+ModulePlate.Position = UDim2.fromOffset(457, 133)
+ModulePlate.Name = "Module Plate"
+ModulePlate.BackgroundTransparency = 1
+Instance.new("UICorner", ModulePlate)
+local ModStroke = Instance.new("UIStroke", ModulePlate)
+ModStroke.Thickness = 4
+ModStroke.Color = WHITE
+RegisterRGB(ModStroke, "Stroke", WHITE)
+Instance.new("UIAspectRatioConstraint", ModulePlate).AspectRatio = 0.70588
+UI_Elements.Modules = ModulePlate
+
+-- 2.5 Logo Plate
+local LogoPlate = Instance.new("Frame", RootContainer)
+LogoPlate.Name = "Logo Plate"
+LogoPlate.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+LogoPlate.BackgroundTransparency = 0.5 
+LogoPlate.BorderSizePixel = 0
+LogoPlate.ClipsDescendants = true 
+LogoPlate.Position = UDim2.fromOffset(12, 12) 
+LogoPlate.Size = UDim2.fromOffset(431, 96)
+
+Instance.new("UICorner", LogoPlate) 
+
+local LogoStroke = Instance.new("UIStroke", LogoPlate)
+LogoStroke.Thickness = 4 
+LogoStroke.Color = WHITE
+RegisterRGB(LogoStroke, "Stroke", WHITE)
+
+local ARC = Instance.new("UIAspectRatioConstraint", LogoPlate)
+ARC.AspectRatio = 4.86659
+
+-- 50 Blessings
+local BlessingsIcon = Instance.new("ImageLabel", LogoPlate)
+BlessingsIcon.Name = "50 Blessings"
+BlessingsIcon.BackgroundTransparency = 1
+BlessingsIcon.Image = "rbxassetid://131184786022521"
+BlessingsIcon.ScaleType = Enum.ScaleType.Fit
+BlessingsIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+BlessingsIcon.BorderSizePixel = 0
+BlessingsIcon.Size = UDim2.new(0.21233, 0, 1.03333, 0)
+BlessingsIcon.Position = UDim2.new(0, 0, -0.03333, 0)
+
+-- ToolBox Sign
+local TitleImage = Instance.new("ImageLabel", LogoPlate)
+TitleImage.Name = "ToolBox Sign"
+TitleImage.BackgroundTransparency = 1
+TitleImage.Image = "rbxassetid://82093755010171"
+TitleImage.ScaleType = Enum.ScaleType.Fit
+TitleImage.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TitleImage.BorderSizePixel = 0
+TitleImage.Size = UDim2.new(0.95892, 0, 1.5, 0)
+TitleImage.Position = UDim2.new(0.09589, 0, -0.36667, 0)
+
+-- Description/Subtitle
+local Subtitle = Instance.new("TextLabel", LogoPlate)
+Subtitle.Name = "Description"
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "Made by HanzoRTX"
+Subtitle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Subtitle.TextColor3 = Color3.fromRGB(178, 178, 178)
+Subtitle.BorderSizePixel = 0
+Subtitle.TextSize = 10
+Subtitle.Size = UDim2.new(0.71234, 0, 0.76667, 0)
+Subtitle.Position = UDim2.new(0.09589, 0, 0.43333, 0)
+
+UI_Elements.Logo = LogoPlate 
+
+-- 2.6 Minimize Plate
+local MinPlate = Instance.new("Frame", RootContainer)
+MinPlate.BorderSizePixel = 0
+MinPlate.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MinPlate.Size = UDim2.fromOffset(89, 96)
+MinPlate.Position = UDim2.fromOffset(794, 12)
+MinPlate.Name = "Minimize Plate"
+MinPlate.BackgroundTransparency = 0.5
+Instance.new("UICorner", MinPlate)
+local MinStroke = Instance.new("UIStroke", MinPlate)
+MinStroke.Thickness = 4
+MinStroke.Color = WHITE
+RegisterRGB(MinStroke, "Stroke", WHITE)
+Instance.new("UIAspectRatioConstraint", MinPlate).AspectRatio = 1
+UI_Elements.Min = MinPlate
+
+local MinButton = Instance.new("TextButton", MinPlate)
+MinButton.TextSize = 40
+MinButton.TextColor3 = WHITE
+MinButton.Font = mainFont
+MinButton.BackgroundTransparency = 1
+MinButton.AnchorPoint = Vector2.new(0.5, 0.5)
+MinButton.Position = UDim2.new(0.5, 0, 0.5, 0)
+MinButton.Size = UDim2.fromOffset(44, 44)
+MinButton.Text = "Ã—"
+
+-- Restore Button
+local Restore = Instance.new("TextButton", RootContainer)
+Restore.Name = "RestoreButton"
+Restore.Size = UDim2.new(0, 60, 0, 60)
+Restore.Position = UDim2.fromOffset(10, math.floor(DESIGN_HEIGHT * 0.5))
+Restore.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Restore.BackgroundTransparency = 0.2
+Restore.Visible = false
+Restore.Text = ""
+Instance.new("UICorner", Restore).CornerRadius = UDim.new(1,0)
+local rStroke = Instance.new("UIStroke", Restore)
+rStroke.Color = WHITE
+rStroke.Thickness = 3
+rStroke.Transparency = 0.5
+local rIcon = Instance.new("ImageLabel", Restore)
+rIcon.Image = "rbxassetid://92183937610889"
+rIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+rIcon.Position = UDim2.new(0.5,0,0.5,0)
+rIcon.AnchorPoint = Vector2.new(0.5,0.5)
+rIcon.BackgroundTransparency = 1
+
+-- =========================================================================
+-- 3. INNER CONTAINERS
+-- =========================================================================
+
+local function createInnerScroll(parent)
+	local scroll = Instance.new("ScrollingFrame", parent)
+	scroll.Size = UDim2.new(1, 0, 1, 0)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 0
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y 
+	
+	local layout = Instance.new("UIListLayout", scroll)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 5)
+	
+	local padding = Instance.new("UIPadding", scroll)
+	padding.PaddingTop = UDim.new(0, 2)
+	padding.PaddingBottom = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 5)
+	padding.PaddingRight = UDim.new(0, 5)
+	
+	return scroll, layout, padding
+end
+
+local ModuleScroll, ModuleListLayout, ModulePadding = createInnerScroll(ModulePlate)
+
+-- Category Scroll
+local CategoryScroll = Instance.new("ScrollingFrame", CatListPlate)
+CategoryScroll.Size = UDim2.new(1, 0, 1, 0) 
+CategoryScroll.BackgroundTransparency = 1
+CategoryScroll.BorderSizePixel = 0
+CategoryScroll.ScrollBarThickness = 0
+CategoryScroll.AutomaticCanvasSize = Enum.AutomaticSize.None 
+
+local CategoryListLayout = Instance.new("UIListLayout", CategoryScroll)
+CategoryListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+CategoryListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CategoryListLayout.Padding = UDim.new(0, 5)
+
+local CategoryPadding = Instance.new("UIPadding", CategoryScroll)
+CategoryPadding.PaddingTop = UDim.new(0, 2) 
+CategoryPadding.PaddingBottom = UDim.new(0, 2) 
+CategoryPadding.PaddingLeft = UDim.new(0, 5)
+CategoryPadding.PaddingRight = UDim.new(0, 5)
+
+-- Settings Container
+local SettingsContainer = Instance.new("Frame", ModulePlate)
+SettingsContainer.Name = "Settings_Container_Hidden"
+SettingsContainer.Size = UDim2.new(1, 0, 1, 0)
+SettingsContainer.BackgroundTransparency = 1
+SettingsContainer.Visible = false
+local SettingsScroll, SettingsListLayout, SettingsPadding = createInnerScroll(SettingsContainer)
+
+-- Shortcuts Container
+local ShortcutsContainer = Instance.new("Frame", ModulePlate)
+ShortcutsContainer.Name = "Shortcuts_Container_Hidden"
+ShortcutsContainer.Size = UDim2.new(1, 0, 1, 0)
+ShortcutsContainer.BackgroundTransparency = 1
+ShortcutsContainer.Visible = false
+
+-- Search Bar Area
+local SearchFrame = Instance.new("Frame", ShortcutsContainer)
+SearchFrame.Size = UDim2.new(1, 0, 0, 35)
+SearchFrame.BackgroundTransparency = 1
+local SearchIcon = Instance.new("ImageLabel", SearchFrame)
+SearchIcon.Size = UDim2.new(0, 20, 0, 20)
+SearchIcon.Position = UDim2.new(0, 10, 0.5, 0)
+SearchIcon.AnchorPoint = Vector2.new(0, 0.5)
+SearchIcon.Image = "rbxassetid://7734068321" -- Search icon
+SearchIcon.BackgroundTransparency = 1
+local SearchBox = Instance.new("TextBox", SearchFrame)
+SearchBox.Size = UDim2.new(1, -40, 1, 0)
+SearchBox.Position = UDim2.new(0, 35, 0, 0)
+SearchBox.BackgroundTransparency = 1
+SearchBox.Text = ""
+SearchBox.PlaceholderText = "Search..."
+SearchBox.TextColor3 = WHITE
+SearchBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+SearchBox.Font = mainFont
+SearchBox.TextSize = 18
+
+-- Shortcuts List Scroll (Below Search)
+local ShortcutsScroll = Instance.new("ScrollingFrame", ShortcutsContainer)
+ShortcutsScroll.Size = UDim2.new(1, 0, 1, -40)
+ShortcutsScroll.Position = UDim2.new(0, 0, 0, 40)
+ShortcutsScroll.BackgroundTransparency = 1
+ShortcutsScroll.BorderSizePixel = 0
+ShortcutsScroll.ScrollBarThickness = 0
+local ShortcutsListLayout = Instance.new("UIListLayout", ShortcutsScroll)
+ShortcutsListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+ShortcutsListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ShortcutsListLayout.Padding = UDim.new(0, 5)
+local ShortcutsPadding = Instance.new("UIPadding", ShortcutsScroll)
+ShortcutsPadding.PaddingLeft = UDim.new(0, 5)
+ShortcutsPadding.PaddingRight = UDim.new(0, 5)
+
+-- Settings Button
+local SettingsButton = Instance.new("TextButton", LinkPlate)
+SettingsButton.Size = UDim2.new(1, -10, 0, 45)
+SettingsButton.Position = UDim2.new(0.5, 0, 0, 2) 
+SettingsButton.AnchorPoint = Vector2.new(0.5, 0)
+SettingsButton.BackgroundColor3 = Color3.fromRGB(0,0,0)
+SettingsButton.BackgroundTransparency = 1
+SettingsButton.Text = ""
+SettingsButton.AutoButtonColor = false
+Instance.new("UICorner", SettingsButton).CornerRadius = UDim.new(0.3, 0)
+
+local SettingsIcon = Instance.new("ImageLabel", SettingsButton)
+SettingsIcon.Image = "rbxassetid://72378491918047"
+SettingsIcon.Size = UDim2.new(0.85, 0, 0.85, 0)
+SettingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+SettingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+SettingsIcon.BackgroundTransparency = 1
+SettingsIcon.ImageColor3 = WHITE
+SettingsIcon.ScaleType = Enum.ScaleType.Fit 
+
+-- =========================================================================
+-- 4. GLOBAL LOGIC (Sliders, Dragging, Search)
+-- =========================================================================
+
+local ActiveSlider = nil 
+
+UserInputService.InputChanged:Connect(function(input)
+    if ActiveSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        ActiveSlider.Update(input)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if ActiveSlider and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        ActiveSlider = nil
+    end
+end)
+
+-- Mobile Button Drag Logic
+local function makeDraggableButton(btn, onClick)
+    local dragging, dragStart, startPos
+    local isMoved = false
+    
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            isMoved = false
+            dragStart = input.Position
+            startPos = btn.Position
+        end
+    end)
+    
+    btn.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 5 then isMoved = true end
+            btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not isMoved and onClick then
+                onClick()
+            end
+        end
+    end)
+end
+
+-- Search Logic
+local function filterShortcuts(text)
+    text = text:lower()
+    for _, child in ipairs(ShortcutsScroll:GetChildren()) do
+        if child:IsA("Frame") and child.Name == "ShortcutRow" then
+            local label = child:FindFirstChild("Label")
+            if label then
+                local visible = label.Text:lower():find(text, 1, true) ~= nil
+                child.Visible = visible
+            end
+        elseif child:IsA("TextLabel") and child.Name == "Header" then
+            -- Hide headers if searching
+            child.Visible = (text == "")
+        end
+    end
+end
+
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    filterShortcuts(SearchBox.Text)
+end)
+
+local updateScroll
+
+-- =========================================================================
+-- 5. COMPONENT CREATORS
+-- =========================================================================
+
+local ModuleUICorner = Instance.new("UICorner")
+ModuleUICorner.CornerRadius = UDim.new(0.2, 0)
+
+local function applyCorner(frame)
+    frame.BackgroundTransparency = 1 
+    ModuleUICorner:Clone().Parent = frame
+end
+
+local function applyStyleStroke(frame)
+    applyCorner(frame)
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.6
+    stroke.Color = WHITE
+    return frame
+end
+
+local function addClickHighlight(btn)
+    btn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    btn.BackgroundTransparency = 1
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundTransparency = 0.85}):Play()
+        end
+    end)
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+             TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        end
+    end)
+end
+
+local function createSlider(name, minVal, maxVal, initialVal, step, callback)
+    step = step or 1 
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 60)
+    frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    applyCorner(frame)
+    
+    local current = initialVal or minVal
+    local title = Instance.new("TextLabel", frame)
+    title.Text = name
+    title.Size = UDim2.new(1, -95, 0.3, 0)
+    title.Position = UDim2.new(0.05, 0, 0.1, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextSize = 16
+    title.Font = mainFont
+    
+    local valLab = Instance.new("TextLabel", frame)
+    valLab.Text = tostring(current)
+    valLab.Size = UDim2.new(0, 50, 0.3, 0)
+    valLab.Position = UDim2.new(1, -8, 0.1, 0)
+    valLab.AnchorPoint = Vector2.new(1, 0)
+    valLab.BackgroundTransparency = 1
+    valLab.TextColor3 = WHITE
+    valLab.TextXAlignment = Enum.TextXAlignment.Right
+    valLab.TextSize = 16
+    valLab.Font = mainFont
+    
+    local track = Instance.new("Frame", frame)
+    track.Size = UDim2.new(1, -40, 0, 4)
+    track.Position = UDim2.new(0.5, 0, 0.65, 0)
+    track.AnchorPoint = Vector2.new(0.5, 0.5)
+    track.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    track.BorderSizePixel = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(0,0,1,0)
+    fill.Position = UDim2.new(0, 0, 0.5, 0)
+    fill.AnchorPoint = Vector2.new(0, 0.5)
+    fill.BackgroundColor3 = SELECTED_COLOR
+    fill.BorderSizePixel = 0
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
+    RegisterRGB(fill, "Background") 
+
+    local knob = Instance.new("TextButton", track)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.BackgroundColor3 = WHITE
+    knob.ZIndex = 5
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Text = ""
+    
+    local hitbox = Instance.new("TextButton", frame)
+    hitbox.Size = UDim2.new(1, -40, 0, 40) 
+    hitbox.Position = UDim2.new(0.5, 0, 0.65, 0)
+    hitbox.AnchorPoint = Vector2.new(0.5, 0.5)
+    hitbox.BackgroundTransparency = 1
+    hitbox.Text = ""
+    hitbox.ZIndex = 10 
+    
+    local function update(input)
+        local sizeX = track.AbsoluteSize.X
+        if sizeX == 0 then return end
+        local pos = input.Position.X - track.AbsolutePosition.X
+        local pct = math.clamp(pos / sizeX, 0, 1)
+        local raw = minVal + (maxVal - minVal) * pct
+        current = math.floor(raw / step + 0.5) * step
+        local finalPct = (current - minVal) / (maxVal - minVal)
+        
+        fill.Size = UDim2.new(finalPct, 0, 1, 0)
+        knob.Position = UDim2.new(finalPct, 0, 0.5, 0)
+        valLab.Text = tostring(current)
+        if callback then callback(current) end
+    end
+    
+    local iP = (current - minVal) / (maxVal - minVal)
+    fill.Size = UDim2.new(iP, 0, 1, 0)
+    knob.Position = UDim2.new(iP, 0, 0.5, 0)
+
+    hitbox.InputBegan:Connect(function(i) 
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
+             if ActiveSlider == nil then
+                ActiveSlider = { Update = update }
+                update(i)
+            end
+        end 
+    end)
+    
+    return frame
+end
+
+local function createSelect(name, options, isMultiSelect, settingsContainer, getIsOpen, settingsIndicator)
+    local OPTION_HEIGHT = 35
+    local PADDING = 5
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundTransparency = 1
+    frame.ClipsDescendants = true
+    frame.AutomaticSize = Enum.AutomaticSize.Y 
+    local list = Instance.new("UIListLayout", frame)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    local bar = Instance.new("TextButton", frame)
+    bar.Size = UDim2.new(1, 0, 0, 40)
+    bar.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    bar.Text = ""
+    bar.AutoButtonColor = false
+    bar.LayoutOrder = 1
+    applyStyleStroke(bar) 
+    local title = Instance.new("TextLabel", bar)
+    title.Text = name
+    title.Size = UDim2.new(1, -150, 1, 0)
+    title.Position = UDim2.new(0.05, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = mainFont
+    title.TextSize = 18
+    local selLab = Instance.new("TextLabel", bar)
+    selLab.Text = options[1] or ""
+    selLab.Size = UDim2.new(0, 120, 1, 0)
+    selLab.Position = UDim2.new(1, -10, 0, 0)
+    selLab.AnchorPoint = Vector2.new(1, 0)
+    selLab.BackgroundTransparency = 1
+    selLab.TextColor3 = Color3.fromRGB(200, 200, 200)
+    selLab.TextXAlignment = Enum.TextXAlignment.Right
+    selLab.Font = mainFont
+    selLab.TextSize = 16
+    
+    local optFrame = Instance.new("Frame", frame)
+    optFrame.Name = "OptionsFrame" -- Named for finding later
+    optFrame.Size = UDim2.new(1, 0, 0, 0)
+    optFrame.BackgroundTransparency = 1
+    optFrame.ClipsDescendants = true
+    optFrame.LayoutOrder = 2
+    local oList = Instance.new("UIListLayout", optFrame)
+    oList.Padding = UDim.new(0, PADDING)
+    local oPad = Instance.new("UIPadding", optFrame)
+    oPad.PaddingLeft = UDim.new(0.05, 0)
+    oPad.PaddingRight = UDim.new(0.05, 0)
+    oPad.PaddingTop = UDim.new(0, PADDING)
+    oPad.PaddingBottom = UDim.new(0, PADDING)
+
+    local isOpen = false
+    local selectedMap = {}
+	if options[1] then selectedMap[options[1]] = true end 
+    local buttons = {}
+
+    local function updateParent()
+        task.wait()
+        if getIsOpen() then
+             local l = settingsContainer:FindFirstChildOfClass("UIListLayout")
+             local p = settingsContainer:FindFirstChildOfClass("UIPadding")
+             if l and p then
+                local h = l.AbsoluteContentSize.Y + p.PaddingTop.Offset + p.PaddingBottom.Offset
+                TweenService:Create(settingsContainer, TweenInfo.new(getAnimSpeed()), {Size = UDim2.new(1, 0, 0, h)}):Play()
+                local head = settingsContainer.Parent:FindFirstChild("HeaderBar")
+                if head then
+                    TweenService:Create(settingsIndicator, TweenInfo.new(getAnimSpeed()), {
+                        Position = UDim2.new(0, 4, 0, 4),
+                        Size = UDim2.new(0, 2, 0, math.max(0, head.Size.Y.Offset + h - 8))
+                    }):Play()
+                end
+             end
+        end
+    end
+
+    local function refreshOptions(newOptions)
+        -- Clear old buttons
+        for _, c in ipairs(optFrame:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        buttons = {}
+        options = newOptions or {}
+        
+        for i, opt in ipairs(options) do
+            local btn = Instance.new("TextButton", optFrame)
+            btn.Size = UDim2.new(1, 0, 0, 35)
+            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            btn.BackgroundTransparency = 0
+            btn.Text = "  " .. opt
+            btn.TextColor3 = WHITE
+            btn.Font = mainFont
+            btn.TextSize = 16
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            applyCorner(btn)
+            buttons[opt] = btn
+            
+            if selectedMap[opt] then
+                 btn.TextColor3 = SELECTED_TEXT_COLOR
+                RegisterRGB(btn, "Text", SELECTED_TEXT_COLOR)
+            end
+
+            btn.MouseButton1Click:Connect(function()
+                if isMultiSelect then
+                    selectedMap[opt] = not selectedMap[opt]
+                    if selectedMap[opt] then
+                         btn.TextColor3 = SELECTED_TEXT_COLOR
+                        RegisterRGB(btn, "Text", SELECTED_TEXT_COLOR)
+                    else
+                        btn.TextColor3 = WHITE
+                        UnregisterRGB(btn, "Text")
+                     end
+                    local c = {}
+                    for _, o in ipairs(options) do if selectedMap[o] then table.insert(c, o) end end
+                    selLab.Text = #c > 0 and table.concat(c, ", ") or "None"
+                else
+                     for n, b in pairs(buttons) do
+                        b.TextColor3 = WHITE
+                        selectedMap[n] = false
+                        UnregisterRGB(b, "Text")
+                    end
+                    selectedMap[opt] = true
+                    btn.TextColor3 = SELECTED_TEXT_COLOR
+                    RegisterRGB(btn, "Text", SELECTED_TEXT_COLOR)
+                    selLab.Text = opt
+                    isOpen = false
+                    optFrame.Size = UDim2.new(1, 0, 0, 0)
+                    updateParent()
+                end
+            end)
+        end
+    end
+    
+    -- Initial build
+    refreshOptions(options)
+
+    bar.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        local h = 0
+        if isOpen and #options > 0 then h = (#options * OPTION_HEIGHT) + (#options * (PADDING - 1)) + oPad.PaddingTop.Offset + oPad.PaddingBottom.Offset end
+        optFrame.Size = UDim2.new(1, 0, 0, h)
+        updateParent()
+    end)
+    
+    return frame, refreshOptions
+end
+
+-- Checkbox Style
+local function createCheckbox(name, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundTransparency = 1
+    
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    applyStyleStroke(btn)
+    
+    local title = Instance.new("TextLabel", btn)
+    title.Text = name
+    title.Size = UDim2.new(1, -95, 1, 0)
+    title.Position = UDim2.new(0.05, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = mainFont
+    title.TextSize = 18
+    
+    local check = Instance.new("Frame", btn)
+    check.Size = UDim2.new(0, 24, 0, 24)
+    check.Position = UDim2.new(1, -12, 0.5, 0)
+    check.AnchorPoint = Vector2.new(1, 0.5)
+    check.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Instance.new("UICorner", check).CornerRadius = UDim.new(0.2, 0)
+    
+    local ind = Instance.new("Frame", check)
+    ind.Size = UDim2.new(0, 14, 0, 14)
+    ind.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ind.AnchorPoint = Vector2.new(0.5, 0.5)
+    ind.BackgroundColor3 = SELECTED_COLOR
+    ind.BackgroundTransparency = default and 0 or 1
+    Instance.new("UICorner", ind).CornerRadius = UDim.new(0.2, 0)
+    if default then RegisterRGB(ind, "Background") end
+
+    local isOn = default
+    btn.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        TweenService:Create(ind, TweenInfo.new(0.2), {BackgroundTransparency = isOn and 0 or 1}):Play()
+        if isOn then RegisterRGB(ind, "Background") else UnregisterRGB(ind, "Background") end
+        if callback then callback(isOn) end
+    end)
+    
+    return frame
+end
+
+-- Sliding Switch Style (Inner Toggle)
+local function createSlidingToggle(name, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundTransparency = 1
+    
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    applyStyleStroke(btn)
+    
+    local title = Instance.new("TextLabel", btn)
+    title.Text = name
+    title.Size = UDim2.new(1, -95, 1, 0)
+    title.Position = UDim2.new(0.05, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = mainFont
+    title.TextSize = 18
+    
+    -- Track Positioned exactly at 1.0 (Right Edge) to match Main Toggle
+    local tr = Instance.new("Frame", btn)
+    tr.Size = UDim2.new(0, 50, 0, 24)
+    tr.Position = UDim2.new(1, -12, 0.5, 0) 
+    tr.AnchorPoint = Vector2.new(1, 0.5)
+    Instance.new("UICorner", tr).CornerRadius = UDim.new(1,0)
+    
+    local kn = Instance.new("Frame", tr)
+    kn.Size = UDim2.new(0, 18, 0, 18)
+    kn.AnchorPoint = Vector2.new(0.5, 0.5)
+    kn.BackgroundColor3 = WHITE
+    Instance.new("UICorner", kn).CornerRadius = UDim.new(1,0)
+
+    local isOn = default
+    local function up()
+        local c, p
+        if isOn then 
+            c = SELECTED_COLOR
+            p = UDim2.new(1, -12, 0.5, 0)
+            RegisterRGB(tr, "Background")
+        else 
+            c = Color3.fromRGB(80, 80, 80) 
+            p = UDim2.new(0, 12, 0.5, 0)
+            UnregisterRGB(tr, "Background") 
+        end
+        TweenService:Create(tr, TweenInfo.new(getAnimSpeed()), {BackgroundColor3 = c}):Play()
+        TweenService:Create(kn, TweenInfo.new(getAnimSpeed()), {Position = p}):Play()
+    end
+    up()
+
+    btn.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        up()
+        if callback then callback(isOn) end
+    end)
+    
+    return frame
+end
+
+
+local function createTextButton(name, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.Text = name
+    b.Font = mainFont
+    b.TextSize = 18
+    b.AutoButtonColor = false
+    b.BackgroundTransparency = 1
+    b.TextColor3 = WHITE
+    
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    local pad = Instance.new("UIPadding", b)
+    pad.PaddingLeft = UDim.new(0, 15)
+    pad.PaddingRight = UDim.new(0, 15)
+    
+    local arrow = Instance.new("ImageLabel", b)
+    arrow.Size = UDim2.new(0, 20, 0, 20)
+    arrow.Position = UDim2.new(1, -10, 0.5, 0)
+    arrow.AnchorPoint = Vector2.new(1, 0.5)
+    arrow.BackgroundTransparency = 1
+    arrow.Image = "rbxassetid://106581574680975" 
+    arrow.ImageColor3 = Color3.fromRGB(200, 200, 200)
+
+    addClickHighlight(b)
+    b.MouseButton1Click:Connect(function() if callback then pcall(callback) end end)
+    return b
+end
+
+local function createOneTimeButton(name, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.Text = name
+    b.Font = mainFont
+    b.TextSize = 18
+    b.AutoButtonColor = false
+    b.BackgroundTransparency = 1
+    b.TextColor3 = WHITE
+    
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    local pad = Instance.new("UIPadding", b)
+    pad.PaddingLeft = UDim.new(0, 15)
+    pad.PaddingRight = UDim.new(0, 15)
+
+    local arrow = Instance.new("ImageLabel", b)
+    arrow.Size = UDim2.new(0, 20, 0, 20)
+    arrow.Position = UDim2.new(1, -10, 0.5, 0)
+    arrow.AnchorPoint = Vector2.new(1, 0.5)
+    arrow.BackgroundTransparency = 1
+    arrow.Image = "rbxassetid://106581574680975" 
+    arrow.ImageColor3 = Color3.fromRGB(200, 200, 200)
+    
+    local clicked = false
+    b.BackgroundColor3 = Color3.fromRGB(200, 200, 200) 
+    
+    b.InputBegan:Connect(function(input)
+        if clicked then return end 
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+             TweenService:Create(b, TweenInfo.new(0.1), {BackgroundTransparency = 0.85}):Play()
+        end
+    end)
+    
+    b.InputEnded:Connect(function(input)
+        if clicked then return end 
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(b, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        end
+    end)
+
+    b.MouseButton1Click:Connect(function()
+         if clicked then return end
+        clicked = true
+        TweenService:Create(b, TweenInfo.new(0.1), {BackgroundTransparency = 1}):Play()
+        if callback then pcall(callback) end
+        TweenService:Create(b, TweenInfo.new(0.2), {TextColor3 = SELECTED_TEXT_COLOR}):Play()
+        RegisterRGB(b, "Text", SELECTED_TEXT_COLOR)
+    end)
+    return b
+end
+
+local function createOneTimeModuleButton(name, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.Text = ""
+    b.AutoButtonColor = false
+    b.BackgroundTransparency = 1
+    
+    local t = Instance.new("TextLabel", b)
+    t.Text = name
+    t.Size = UDim2.new(1, 0, 1, 0)
+    t.BackgroundTransparency = 1
+    t.Font = mainFont
+    t.TextSize = 18
+    t.TextColor3 = WHITE
+    
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    local pad = Instance.new("UIPadding", b)
+    pad.PaddingLeft = UDim.new(0, 15)
+    pad.PaddingRight = UDim.new(0, 15)
+
+    local arrow = Instance.new("ImageLabel", b)
+    arrow.Size = UDim2.new(0, 20, 0, 20)
+    arrow.Position = UDim2.new(1, -10, 0.5, 0)
+    arrow.AnchorPoint = Vector2.new(1, 0.5)
+    arrow.BackgroundTransparency = 1
+    arrow.Image = "rbxassetid://106581574680975" 
+    arrow.ImageColor3 = Color3.fromRGB(200, 200, 200)
+
+    local clicked = false
+    b.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    
+    b.InputBegan:Connect(function(input)
+        if clicked then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(b, TweenInfo.new(0.1), {BackgroundTransparency = 0.85}):Play()
+        end
+    end)
+    
+    b.InputEnded:Connect(function(input)
+        if clicked then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(b, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        end
+    end)
+
+    b.MouseButton1Click:Connect(function()
+         if clicked then return end
+        clicked = true
+        TweenService:Create(b, TweenInfo.new(0.1), {BackgroundTransparency = 1}):Play()
+        if callback then pcall(callback) end
+        TweenService:Create(t, TweenInfo.new(0.2), {TextColor3 = SELECTED_TEXT_COLOR}):Play()
+        RegisterRGB(t, "Text", SELECTED_TEXT_COLOR)
+    end)
+    return b
+end
+
+local function createModule(name, init, toggle, toggleCallback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.AutomaticSize = Enum.AutomaticSize.Y
+    frame.BackgroundTransparency = 1
+    local list = Instance.new("UIListLayout", frame)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    local head = Instance.new("TextButton", frame)
+    head.Name = "HeaderBar"
+    head.Size = UDim2.new(1, 0, 0, 40)
+    head.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    head.Text = ""
+    head.AutoButtonColor = false
+    head.LayoutOrder = 1
+    applyStyleStroke(head)
+    
+    local ind = Instance.new("Frame", frame)
+    ind.BackgroundColor3 = WHITE
+    ind.BackgroundTransparency = 1
+    ind.Size = UDim2.new(0, 2, 0, 32)
+    ind.Position = UDim2.new(0, 4, 0, 4)
+    ind.AnchorPoint = Vector2.new(0, 0)
+    ind.ZIndex = 10
+    Instance.new("UICorner", ind).CornerRadius = UDim.new(0.2,0)
+    RegisterRGB(ind, "Background", WHITE) 
+
+    local title = Instance.new("TextLabel", head)
+    title.Text = name
+    title.Size = UDim2.new(1, -95, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = mainFont
+    title.TextSize = 18
+    
+    -- Main Module Toggle Logic
+    local setToggleState = function(state) end -- Placeholder, overridden below
+    if toggle then
+        local tr = Instance.new("TextButton", head)
+        tr.Name = "ToggleTrack"
+        tr.Size = UDim2.new(0, 50, 0, 24)
+        tr.Position = UDim2.new(1, -12, 0.5, 0)
+        tr.AnchorPoint = Vector2.new(1, 0.5)
+        tr.Text = ""
+        tr.AutoButtonColor = false
+        Instance.new("UICorner", tr).CornerRadius = UDim.new(1,0)
+        local kn = Instance.new("Frame", tr)
+        kn.Size = UDim2.new(0, 18, 0, 18)
+        kn.AnchorPoint = Vector2.new(0.5, 0.5)
+        kn.BackgroundColor3 = WHITE
+        Instance.new("UICorner", kn).CornerRadius = UDim.new(1,0)
+        
+        local isT = init or false
+        
+        setToggleState = function(newState)
+            isT = newState
+            local c, p
+            if isT then 
+                c = SELECTED_COLOR
+                p = UDim2.new(1, -12, 0.5, 0)
+                RegisterRGB(tr, "Background")
+            else 
+                c = Color3.fromRGB(120, 120, 120)
+                p = UDim2.new(0, 12, 0.5, 0)
+                UnregisterRGB(tr, "Background") 
+            end
+            TweenService:Create(tr, TweenInfo.new(getAnimSpeed()), {BackgroundColor3 = c}):Play()
+            TweenService:Create(kn, TweenInfo.new(getAnimSpeed()), {Position = p}):Play()
+            if toggleCallback then toggleCallback(isT) end
+        end
+        
+        setToggleState(isT) -- Init visual
+        
+        tr.MouseButton1Click:Connect(function() 
+             setToggleState(not isT)
+        end)
+    end
+    
+    local sett = Instance.new("Frame", frame)
+    sett.Name="SettingsContainer"
+    sett.Size = UDim2.new(1, 0, 0, 0)
+    sett.AutomaticSize = Enum.AutomaticSize.Y
+    sett.ClipsDescendants = false
+    sett.Visible = false
+    sett.LayoutOrder = 2
+    sett.BackgroundTransparency = 1
+    local list2 = Instance.new("UIListLayout", sett)
+    list2.SortOrder = Enum.SortOrder.LayoutOrder
+    list2.Padding = UDim.new(0, 5)
+    local sp = Instance.new("UIPadding", sett)
+    sp.PaddingTop=UDim.new(0,5)
+    sp.PaddingBottom=UDim.new(0,5)
+    sp.PaddingLeft=UDim.new(0.05,0)
+    sp.PaddingRight=UDim.new(0,0) -- keep settings toggles aligned with module header toggle
+
+    local open = false
+    local hasI = false
+
+    local function getSettingsHeight()
+        return list2.AbsoluteContentSize.Y + sp.PaddingTop.Offset + sp.PaddingBottom.Offset
+    end
+
+    local function applyModuleOpenState()
+        local h = open and getSettingsHeight() or 0
+
+        sett.Visible = open
+        sett.Size = UDim2.new(1, 0, 0, h)
+
+        if open then
+            -- ind lives on frame; span from top of header down through the settings panel
+            ind.Position = UDim2.new(0, 4, 0, 4)
+            ind.Size = UDim2.new(0, 2, 0, math.max(0, head.Size.Y.Offset + h - 8))
+            ind.BackgroundTransparency = 0
+        else
+            -- Collapsed: sit in the middle of the header only, hidden
+            ind.Position = UDim2.new(0, 4, 0, 4)
+            ind.Size = UDim2.new(0, 2, 0, head.Size.Y.Offset - 8)
+            ind.BackgroundTransparency = 1
+        end
+
+        task.defer(function()
+            updateScroll(ModuleScroll, ModuleListLayout, ModulePadding)
+        end)
+    end
+
+    list2:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if open then
+            applyModuleOpenState()
+        end
+    end)
+
+    head.MouseButton1Click:Connect(function()
+        if not hasI then return end
+        open = not open
+        applyModuleOpenState()
+        task.defer(applyModuleOpenState)
+    end)
+
+    local api = {}
+    local function mark() if not hasI then hasI = true end end
+    function api:Slider(n, min, max, i, s) mark(); createSlider(n, min, max, i, s).Parent = sett; return api end
+    
+    function api:Select(n, o) 
+        mark() 
+        local f, updateFunc = createSelect(n, o, false, sett, function() return open end, ind)
+        f.Parent = sett
+        return api, updateFunc 
+    end
+    
+    function api:MultiSelect(n, o) 
+        mark() 
+        local f, updateFunc = createSelect(n, o, true, sett, function() return open end, ind)
+        f.Parent = sett
+        return api, updateFunc
+    end
+    
+    -- Sliding Toggle (default)
+    function api:Toggle(n, def, c) 
+        mark() 
+        createSlidingToggle(n, def, c).Parent = sett 
+        return api 
+    end
+
+    -- Checkbox Option
+    function api:Checkbox(n, def, c) 
+        mark() 
+        createCheckbox(n, def, c).Parent = sett 
+        return api 
+    end
+
+    function api:TextButton(n, c) mark(); createTextButton(n, c).Parent = sett; return api end
+    function api:OneTimeButton(n, c) mark(); createOneTimeButton(n, c).Parent = sett; return api end
+    
+    -- Return frame, api, and the toggle function for external use
+    return frame, api, setToggleState
+end
+
+local function createDivider(name)
+    local f, a = createModule(name, nil, false)
+    f.Name = name .. "Divider"
+    return f, a
+end
+
+-- =========================================================================
+-- 6. "SHORTCUT" BUTTON (AUTO-BOTTOM)
+-- =========================================================================
+
+-- Spacer
+local ShortcutSpacer = Instance.new("Frame", CategoryScroll)
+ShortcutSpacer.Name = "Spacer"
+ShortcutSpacer.BackgroundTransparency = 1
+ShortcutSpacer.Size = UDim2.new(1, 0, 0, 30) 
+ShortcutSpacer.LayoutOrder = 9998 
+
+local ShortcutsButton = Instance.new("TextButton", CategoryScroll) 
+ShortcutsButton.Name = "ShortcutsButton"
+ShortcutsButton.Size = UDim2.new(1, 0, 0, 45) 
+ShortcutsButton.LayoutOrder = 9999 
+ShortcutsButton.BackgroundColor3 = DESELECTED_COLOR
+ShortcutsButton.BackgroundTransparency = 1
+ShortcutsButton.Text = ""
+ShortcutsButton.AutoButtonColor = false 
+applyStyleStroke(ShortcutsButton)
+
+local ShortcutsList = Instance.new("UIListLayout", ShortcutsButton)
+ShortcutsList.FillDirection = Enum.FillDirection.Horizontal
+ShortcutsList.VerticalAlignment = Enum.VerticalAlignment.Center
+ShortcutsList.Padding = UDim.new(0, 5)
+Instance.new("UIPadding", ShortcutsButton).PaddingLeft = UDim.new(0, 10)
+
+local ShortcutsIcon = Instance.new("ImageLabel", ShortcutsButton)
+ShortcutsIcon.Image = "rbxassetid://85846095101861"
+ShortcutsIcon.Size = UDim2.new(0, 30, 0, 30)
+ShortcutsIcon.BackgroundTransparency = 1
+ShortcutsIcon.ImageColor3 = WHITE
+
+local ShortcutsText = Instance.new("TextLabel", ShortcutsButton)
+ShortcutsText.Text = "Shortcut"
+ShortcutsText.Font = mainFont
+ShortcutsText.TextSize = 20
+ShortcutsText.TextColor3 = WHITE
+ShortcutsText.BackgroundTransparency = 1
+ShortcutsText.Size = UDim2.new(0, 100, 1, 0)
+ShortcutsText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- UPDATED FUNCTION TO FIX GAP ISSUE
+local function updateSpacer()
+    local containerH = CategoryScroll.AbsoluteWindowSize.Y
+    if containerH == 0 then return end
+    
+    local usedHeight = 0
+    local childCount = 0
+    
+    -- Calculate height of all visible categories
+    for _, child in ipairs(CategoryScroll:GetChildren()) do
+        if child:IsA("GuiObject") and child.Visible and child ~= ShortcutSpacer and child ~= ShortcutsButton then
+            usedHeight = usedHeight + child.Size.Y.Offset
+            childCount = childCount + 1
+        end
+    end
+    
+    -- Add padding for the categories we found (5 pixels each)
+    usedHeight = usedHeight + (math.max(0, childCount) * 5)
+    
+    -- Height of the Shortcut button
+    local footerH = 45
+    
+    -- Calculate how much empty space is actually left
+    local available = containerH - usedHeight - footerH
+    
+    -- FIX: If plenty of space, show Spacer but remove 5px (to account for UIListLayout padding).
+    -- If no space (or negative), HIDE spacer completely so UIListLayout just puts a single 5px gap.
+    if available > 5 then
+        ShortcutSpacer.Visible = true
+        ShortcutSpacer.Size = UDim2.new(1, 0, 0, available - 5)
+    else
+        ShortcutSpacer.Visible = false
+        ShortcutSpacer.Size = UDim2.new(1, 0, 0, 0)
+    end
+end
+
+-- =========================================================================
+-- 7. LOGIC
+-- =========================================================================
+
+updateScroll = function(frame, layout, padding)
+    local h = layout.AbsoluteContentSize.Y + padding.PaddingTop.Offset + padding.PaddingBottom.Offset
+    frame.CanvasSize = UDim2.new(0, 0, 0, h)
+    local max = h - frame.AbsoluteWindowSize.Y
+    if max < 0 then max = 0 end
+    frame.CanvasPosition = Vector2.new(0, math.clamp(frame.CanvasPosition.Y, 0, max))
+end
+
+CategoryScroll:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateSpacer)
+CategoryListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    updateScroll(CategoryScroll, CategoryListLayout, CategoryPadding)
+    updateSpacer() 
+end)
+CategoryScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() updateScroll(CategoryScroll, CategoryListLayout, CategoryPadding) end)
+
+ModuleScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() updateScroll(ModuleScroll, ModuleListLayout, ModulePadding) end)
+ModuleListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() updateScroll(ModuleScroll, ModuleListLayout, ModulePadding) end)
+SettingsScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() updateScroll(SettingsScroll, SettingsListLayout, SettingsPadding) end)
+SettingsListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() updateScroll(SettingsScroll, SettingsListLayout, SettingsPadding) end)
+ShortcutsScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() updateScroll(ShortcutsScroll, ShortcutsListLayout, ShortcutsPadding) end)
+ShortcutsListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() updateScroll(ShortcutsScroll, ShortcutsListLayout, ShortcutsPadding) end)
+
+local Toolbox = { Categories = {}, ActiveCategory = nil }
+
+function Toolbox:Category(name)
+    local data = { Name = name, Elements = {}, Button = nil }
+    local btn = Instance.new("TextButton", CategoryScroll)
+    btn.Size=UDim2.new(1,0,0,45)
+    btn.BackgroundColor3=DESELECTED_COLOR
+    btn.BackgroundTransparency=1
+    btn.Text=""
+    btn.AutoButtonColor = false 
+    applyStyleStroke(btn)
+    local list = Instance.new("UIListLayout", btn)
+    list.FillDirection=Enum.FillDirection.Horizontal
+    list.VerticalAlignment=Enum.VerticalAlignment.Center
+    list.Padding=UDim.new(0,5)
+    Instance.new("UIPadding", btn).PaddingLeft=UDim.new(0,10)
+    local icon = Instance.new("ImageLabel", btn)
+    icon.Image="rbxassetid://100034294666803"
+    icon.Size=UDim2.new(0,30,0,30)
+    icon.BackgroundTransparency=1
+    icon.ImageColor3=WHITE
+    local lbl = Instance.new("TextLabel", btn)
+    lbl.Text=name
+    lbl.Size=UDim2.new(0,100,1,0)
+    lbl.BackgroundTransparency=1
+    lbl.TextColor3=WHITE
+    lbl.Font=mainFont
+    lbl.TextSize=18
+    lbl.TextXAlignment=Enum.TextXAlignment.Left
+
+    btn.MouseButton1Click:Connect(function()
+        if Toolbox.ActiveCategory == data then return end
+        
+        -- Deselect current category
+        if Toolbox.ActiveCategory then
+            Toolbox.ActiveCategory.Button.BackgroundColor3 = DESELECTED_COLOR
+            Toolbox.ActiveCategory.Button.BackgroundTransparency = 1
+            UnregisterRGB(Toolbox.ActiveCategory.Button, "Background")
+            for _, e in ipairs(Toolbox.ActiveCategory.Elements) do e.Visible = false end
+        end
+        
+        -- Hide Special Containers
+        SettingsContainer.Visible = false
+        ShortcutsContainer.Visible = false
+        
+        -- Reset Special Buttons
+        SettingsButton.BackgroundTransparency = 1
+        UnregisterRGB(SettingsButton, "Background")
+        
+        ShortcutsButton.BackgroundColor3 = DESELECTED_COLOR
+        ShortcutsButton.BackgroundTransparency = 1
+        UnregisterRGB(ShortcutsButton, "Background")
+
+        -- Activate New Category
+        Toolbox.ActiveCategory = data
+        btn.BackgroundColor3 = SELECTED_COLOR
+        btn.BackgroundTransparency = 0
+        RegisterRGB(btn, "Background")
+        for _, e in ipairs(data.Elements) do e.Visible = true end
+    end)
+    data.Button = btn
+    table.insert(Toolbox.Categories, data)
+
+    local tab = {}
+    
+    -- Modified to return toggleStateFunc
+    function tab:ModuleSettingDropdown(n, i, cb)
+        local c, a, toggleFunc = createModule(n, i, true, cb)
+        c.Parent = ModuleScroll
+        c.Visible = false
+        table.insert(data.Elements, c)
+        return a, toggleFunc -- Return API and the Toggle Function
+    end
+    
+    function tab:Divider(n)
+        local c, a = createDivider(n)
+        c.Parent = ModuleScroll
+        c.Visible = false
+        table.insert(data.Elements, c)
+        return a
+    end
+    function tab:OneTimeButton(n, c)
+        local b = createOneTimeModuleButton(n, c)
+        b.Parent = ModuleScroll
+        b.Visible = false
+        table.insert(data.Elements, b)
+        return tab
+    end
+    function tab:TextButton(n, c)
+        local b = createTextButton(n, c)
+        b.Parent = ModuleScroll
+        b.Visible = false
+        table.insert(data.Elements, b)
+        return tab
+    end
+    return tab
+end
+
+local function clearMain()
+    if Toolbox.ActiveCategory then
+        Toolbox.ActiveCategory.Button.BackgroundColor3 = DESELECTED_COLOR
+        Toolbox.ActiveCategory.Button.BackgroundTransparency = 1
+        UnregisterRGB(Toolbox.ActiveCategory.Button, "Background")
+        for _, e in ipairs(Toolbox.ActiveCategory.Elements) do e.Visible = false end
+        Toolbox.ActiveCategory = nil
+    end
+end
+
+SettingsButton.MouseButton1Click:Connect(function()
+    if SettingsContainer.Visible then return end
+    clearMain()
+    ShortcutsContainer.Visible = false
+    
+    -- Deselect Shortcuts
+    ShortcutsButton.BackgroundColor3 = DESELECTED_COLOR
+    ShortcutsButton.BackgroundTransparency = 1
+    UnregisterRGB(ShortcutsButton, "Background")
+    
+    SettingsContainer.Visible = true
+    SettingsButton.BackgroundTransparency = 0
+    SettingsButton.BackgroundColor3 = SELECTED_COLOR
+    RegisterRGB(SettingsButton, "Background")
+end)
+
+-- SHORTCUTS BUTTON CLICK
+ShortcutsButton.MouseButton1Click:Connect(function()
+    if ShortcutsContainer.Visible then return end
+    clearMain()
+    SettingsContainer.Visible = false
+    
+    -- Deselect Settings
+    SettingsButton.BackgroundTransparency = 1
+    UnregisterRGB(SettingsButton, "Background")
+    
+    ShortcutsContainer.Visible = true
+    ShortcutsButton.BackgroundTransparency = 0
+    ShortcutsButton.BackgroundColor3 = SELECTED_COLOR
+    RegisterRGB(ShortcutsButton, "Background")
+end)
+
+-- =========================================================================
+-- 8. DATA-DRIVEN CONFIG TABLES
+-- =========================================================================
+
+local CombatData = {
+    name = "Combat",
+    icon = "rbxassetid://13837365023", 
+    items = {
+        {
+            type = "toggle",
+            label = "Killaura",
+            path = "killaura/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://13837365023", -- Sword icon
+            items = {
+                { type = "toggle", label = "Attack Mobs", path = "killaura/attack_mobs" },
+                { type = "toggle", label = "Attack Players", path = "killaura/attack_players" },
+                { type = "slider", label = "Interval", path = "killaura/frequency", range = {1, 20} }
+            }
+        },
+        {
+            type = "toggle",
+            label = "CrystalAura",
+            path = "crystal_aura/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://11419717444", -- Crystal icon placeholder
+            items = {
+                { type = "toggle", label = "Tap Attack", path = "hitbox_expand/enabled" },
+                { type = "slider", label = "Range", path = "hitbox_expand/mob_value", range = {3, 10} },
+                { type = "toggle", label = "Far Away", path = "pick_custom_distance/enabled" },
+                { type = "slider", label = "Distance", path = "pick_custom_distance/distance", range = {8, 100} },
+                { type = "toggle", label = "No Knockback", path = "movement/anti_knockback/enabled" }
+            }
+        },
+        {
+            type = "toggle",
+            label = "Anti-Knockback",
+            path = "movement/anti_knockback/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://11419722363", -- Shield icon placeholder
+            items = {}
+        },
+        {
+            type = "toggle",
+            label = "Switcher",
+            path = "switcher/enabled",
+            has_shortcut = false,
+            items = {
+                { type = "slider", label = "Slot Count", path = "switcher/slot_count", range = {1, 9} }
+            }
+        },
+        {
+            type = "toggle",
+            label = "Auto Bow",
+            path = "auto_bow/enabled",
+            has_shortcut = false,
+            items = {}
+        },
+        {
+            type = "player_list", 
+            label = "Teleport to Player",
+            path = "tp_player",
+            has_shortcut = true,
+            icon = "rbxassetid://106581574680975" -- Arrow Icon
+        },
+        {
+            type = "toggle",
+            label = "Hitbox Expand",
+            path = "hitbox_expand/enabled",
+            has_shortcut = false,
+            items = {
+                { type = "slider", label = "Mob Expansion", path = "hitbox_expand/mob_value", range = {1, 20} },
+                { type = "slider", label = "Player Expansion", path = "hitbox_expand/player_value", range = {1, 20} }
+            }
+        },
+        {
+            type = "toggle",
+            label = "Auto Armor",
+            path = "auto_armor/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://11419714881", -- Armor icon placeholder
+            items = {}
+        }
+    }
+}
+
+local VisualsData = {
+    name = "Visuals",
+    icon = "rbxassetid://11419713314", -- Eye/Visuals icon
+    items = {
+        {
+            type = "toggle",
+            label = "ESP",
+            path = "esp/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://11419713314",
+            items = {
+                { type = "multiselect", label = "Draw", path = "esp/draw", options = {"Box", "Name", "Health"} }
+            }
+        },
+        {
+            type = "toggle",
+            label = "Chams",
+            path = "chams/enabled",
+            has_shortcut = true,
+            icon = "rbxassetid://11419720448", -- Person icon placeholder
+            items = {
+                { type = "select", label = "Material", path = "chams/mat", options = {"Neon", "Plastic"} }
+            }
+        },
+        {
+            type = "divider", 
+            label = "World",
+            items = {
+                { type = "slider", label = "Time", path = "world/time", range = {0, 24} }
+            }
+        }
+    }
+}
+
+-- =========================================================================
+-- 9. AUTOMATIC UI BUILDER
+-- =========================================================================
+
+local AllCategories = {CombatData, VisualsData}
+
+local function BuildCategoryFromData(data)
+    local catObj = Toolbox:Category(data.name)
+    
+    for _, item in ipairs(data.items) do
+        
+        -- Handle Main Modules (Toggles)
+        if item.type == "toggle" then
+            
+            local modApi, toggleFunc = catObj:ModuleSettingDropdown(item.label, false, function(isOn)
+                -- When module toggled in menu, update shortcut visual
+                local reg = _G.ModuleRegistry[item.path]
+                if reg then
+                    reg.isOn = isOn
+                    reg.updateShortcut(isOn)
+                end
+                print(item.label .. " Toggled: " .. tostring(isOn))
+            end)
+            
+            -- Register module for Shortcuts
+            if item.has_shortcut then
+                _G.ModuleRegistry[item.path] = {
+                    api = modApi,
+                    toggleFunc = toggleFunc,
+                    isOn = false,
+                    updateShortcut = function() end, -- Placeholder
+                    label = item.label,
+                    icon = item.icon or data.icon or "rbxassetid://0", -- Priority: Item > Category > Default
+                    isAction = false
+                }
+            end
+            
+            if item.items then
+                for _, sub in ipairs(item.items) do
+                    if sub.type == "slider" then
+                        local min = sub.range and sub.range[1] or 0
+                        local max = sub.range and sub.range[2] or 100
+                        
+                        modApi:Slider(sub.label, min, max, min, 1, function(val)
+                            print("Updated [" .. sub.path .. "] to: " .. val)
+                        end)
+                    
+                    elseif sub.type == "toggle" then
+                        modApi:Toggle(sub.label, false, function(v)
+                             print("Updated [" .. sub.path .. "] to: " .. tostring(v))
+                        end)
+                    
+                    elseif sub.type == "checkbox" then
+                        modApi:Checkbox(sub.label, false, function(v)
+                             print("Updated [" .. sub.path .. "] to: " .. tostring(v))
+                        end)
+                        
+                    elseif sub.type == "select" then
+                         modApi:Select(sub.label, sub.options or {})
+                    elseif sub.type == "multiselect" then
+                         modApi:MultiSelect(sub.label, sub.options or {})
+                    end
+                end
+            end
+            
+        -- Handle Action Buttons (One Time Click)
+        elseif item.type == "action" then
+            catObj:OneTimeButton(item.label, function()
+                print("Triggered Action: " .. item.path)
+            end)
+            -- Register Actions for Shortcuts
+            if item.has_shortcut then
+                _G.ModuleRegistry[item.path] = {
+                    toggleFunc = function() print("Triggered Action via Shortcut: " .. item.path) end,
+                    isOn = false,
+                    updateShortcut = function() end,
+                    label = item.label,
+                    icon = item.icon or data.icon or "rbxassetid://0",
+                    isAction = true
+                }
+            end
+        
+        -- Handle Divider (With optional contents)
+        elseif item.type == "divider" then
+            local divApi = catObj:Divider(item.label)
+             if item.items then
+                for _, sub in ipairs(item.items) do
+                       if sub.type == "slider" then
+                         local min = sub.range and sub.range[1] or 0
+                         local max = sub.range and sub.range[2] or 100
+                         divApi:Slider(sub.label, min, max, min, 1, function(val) end)
+                       end
+                end
+            end
+
+        -- Handle Player Teleport Divider + Dropdown
+        elseif item.type == "player_list" then
+            local divApi = catObj:Divider(item.label) -- Creates the Divider Header
+            
+            -- Setup Player List Variables
+            local getPlayers = function()
+                local p = {}
+                for _, pl in ipairs(Players:GetPlayers()) do
+                    if pl ~= LocalPlayer then table.insert(p, pl.Name) end
+                end
+                return p
+            end
+            
+            -- Create Dropdown Inside Divider
+            local _, updateDropdown = divApi:Select("Target Player", getPlayers())
+            
+            -- Auto-Update Logic
+            Players.PlayerAdded:Connect(function() updateDropdown(getPlayers()) end)
+            Players.PlayerRemoving:Connect(function() updateDropdown(getPlayers()) end)
+            
+            -- Confirm Button Inside Divider
+            local function confirmTP()
+                print("Teleporting to selected target...")
+            end
+            divApi:TextButton("Confirm Teleport", confirmTP)
+
+            -- Register for shortcuts
+            if item.has_shortcut then
+                _G.ModuleRegistry[item.path] = {
+                    toggleFunc = confirmTP,
+                    isOn = false,
+                    updateShortcut = function() end,
+                    label = item.label,
+                    icon = item.icon or data.icon or "rbxassetid://0",
+                    isAction = true
+                }
+            end
+        end
+    end
+    
+    return catObj
+end
+
+-- =========================================================================
+-- 10. SHORTCUT TAB BUILDER
+-- =========================================================================
+
+local function BuildShortcutsTab()
+    -- Clear existing shortcuts (if re-building)
+    for _, c in ipairs(ShortcutsScroll:GetChildren()) do
+        if c:IsA("Frame") or c:IsA("TextLabel") then
+            if c ~= ShortcutsTitle then c:Destroy() end
+        end
+    end
+
+    for _, catData in ipairs(AllCategories) do
+        local hasItems = false
+        for _, item in ipairs(catData.items) do
+            if item.has_shortcut then hasItems = true break end
+        end
+
+        if hasItems then
+            -- Category Header
+            local header = Instance.new("TextLabel", ShortcutsScroll)
+            header.Name = "Header"
+            header.Size = UDim2.new(1, 0, 0, 30)
+            header.BackgroundTransparency = 1
+            header.Text = catData.name -- Clean Name (e.g. "Combat")
+            header.TextColor3 = CATEGORY_TEXT_COLOR -- White
+            header.Font = mainFont
+            header.TextSize = 18
+            header.TextXAlignment = Enum.TextXAlignment.Left -- Left Aligned
+            Instance.new("UIPadding", header).PaddingLeft = UDim.new(0, 10)
+            
+            -- Items
+            for _, item in ipairs(catData.items) do
+                if item.has_shortcut then
+                    local reg = _G.ModuleRegistry[item.path]
+                    
+                    local row = Instance.new("Frame", ShortcutsScroll)
+                    row.Name = "ShortcutRow"
+                    row.Size = UDim2.new(1, 0, 0, 50)
+                    row.BackgroundTransparency = 1
+                    
+                    -- Icon (Left Side) - Matches Module Icon
+                    local icon = Instance.new("ImageLabel", row)
+                    icon.Size = UDim2.new(0, 30, 0, 30)
+                    icon.Position = UDim2.new(0, 10, 0.5, 0)
+                    icon.AnchorPoint = Vector2.new(0, 0.5)
+                    icon.BackgroundTransparency = 1
+                    icon.Image = reg.icon
+                    icon.ImageColor3 = WHITE
+                    
+                    -- Name Label (Left Side, next to Icon)
+                    local lbl = Instance.new("TextLabel", row)
+                    lbl.Name = "Label"
+                    lbl.Text = item.label
+                    lbl.Size = UDim2.new(0.5, 0, 1, 0)
+                    lbl.Position = UDim2.new(0, 50, 0, 0) -- Adjusted padding
+                    lbl.BackgroundTransparency = 1
+                    lbl.TextColor3 = WHITE
+                    lbl.Font = mainFont
+                    lbl.TextSize = 18
+                    lbl.TextXAlignment = Enum.TextXAlignment.Left
+                    
+                    -- Mobile Control (Checkbox in Tab -> Spawns Draggable Circle on Screen)
+                    if IsMobile then
+                        -- Checkbox Container (Far Right)
+                        local chkFrame = createCheckbox("", false, function(isOn)
+                            -- This function creates/destroys the draggable circle
+                            if isOn then
+                                -- CREATE CIRCLE BUTTON
+                                local btn = Instance.new("ImageButton", MobileOverlay)
+                                btn.Name = "Shortcut_" .. item.path
+                                btn.Size = UDim2.new(0, 50, 0, 50)
+                                btn.Position = UDim2.new(0.8, 0, 0.5, 0) -- Spawn on right side
+                                btn.AnchorPoint = Vector2.new(0.5, 0.5)
+                                btn.BackgroundColor3 = Color3.fromRGB(0,0,0)
+                                btn.BackgroundTransparency = 0.5
+                                btn.Image = "" -- No image on button itself
+                                btn.ScaleType = Enum.ScaleType.Fit
+                                Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0) -- Perfect Circle
+                                
+                                -- Smaller Icon Inside
+                                local innerIcon = Instance.new("ImageLabel", btn)
+                                innerIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+                                innerIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+                                innerIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+                                innerIcon.BackgroundTransparency = 1
+                                innerIcon.Image = reg.icon -- Same icon as in list
+                                innerIcon.ImageColor3 = WHITE
+                                
+                                local stroke = Instance.new("UIStroke", btn)
+                                stroke.Color = SELECTED_COLOR
+                                stroke.Thickness = 3
+                                stroke.Enabled = reg.isOn -- Sync with current module state
+                                RegisterRGB(stroke, "Stroke", SELECTED_COLOR)
+                                
+                                makeDraggableButton(btn, function()
+                                    -- Click behavior
+                                    if reg.isAction then
+                                        reg.toggleFunc()
+                                        TweenService:Create(innerIcon, TweenInfo.new(0.1), {ImageColor3 = SELECTED_COLOR}):Play()
+                                        task.wait(0.1)
+                                        TweenService:Create(innerIcon, TweenInfo.new(0.1), {ImageColor3 = WHITE}):Play()
+                                    else
+                                        local newState = not reg.isOn
+                                        reg.toggleFunc(newState)
+                                    end
+                                end)
+                                
+                                -- Store reference to update stroke later
+                                _G.ActiveMobileButtons[item.path] = {btn = btn, stroke = stroke}
+                                
+                                -- Initial Update
+                                stroke.Enabled = reg.isOn
+                                
+                            else
+                                -- DESTROY CIRCLE BUTTON
+                                local active = _G.ActiveMobileButtons[item.path]
+                                if active then
+                                    if active.stroke then UnregisterRGB(active.stroke, "Stroke") end
+                                    if active.btn then active.btn:Destroy() end
+                                end
+                                _G.ActiveMobileButtons[item.path] = nil
+                            end
+                        end)
+                        
+                        chkFrame.Parent = row
+                        chkFrame.Position = UDim2.new(1, -10, 0.5, 0) -- Right Aligned
+                        chkFrame.AnchorPoint = Vector2.new(1, 0.5)
+                        chkFrame.Size = UDim2.new(0, 40, 0, 40) 
+
+                    -- PC Control (Keybind Button)
+                    else 
+                        local keyBtn = Instance.new("TextButton", row)
+                        keyBtn.Size = UDim2.new(0, 100, 0, 35)
+                        keyBtn.Position = UDim2.new(1, -10, 0.5, 0) -- Right Aligned
+                        keyBtn.AnchorPoint = Vector2.new(1, 0.5)
+                        keyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                        keyBtn.Text = "NONE"
+                        keyBtn.TextColor3 = WHITE
+                        keyBtn.Font = mainFont
+                        keyBtn.TextSize = 14
+                        Instance.new("UICorner", keyBtn)
+                        
+                        local binding = false
+                        keyBtn.MouseButton1Click:Connect(function()
+                            binding = true
+                            keyBtn.Text = "..."
+                            keyBtn.TextColor3 = SELECTED_TEXT_COLOR
+                        end)
+                        
+                        UserInputService.InputBegan:Connect(function(input)
+                            if not binding then return end
+                            if input.UserInputType == Enum.UserInputType.Keyboard then
+                                binding = false
+                                
+                                -- Clear old bind for this path
+                                for k, v in pairs(_G.Keybinds) do
+                                    if v == item.path then _G.Keybinds[k] = nil end
+                                end
+                                
+                                -- Set new bind
+                                _G.Keybinds[input.KeyCode] = item.path
+                                keyBtn.Text = input.KeyCode.Name
+                                keyBtn.TextColor3 = WHITE
+                            elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+                                -- Cancel if clicked elsewhere (simple check)
+                                binding = false
+                                keyBtn.Text = "NONE"
+                                keyBtn.TextColor3 = WHITE
+                            end
+                        end)
+                    end
+                    
+                    -- Global update function to sync visuals
+                    reg.updateShortcut = function(isOn)
+                        -- Sync Mobile Circle Stroke
+                        local active = _G.ActiveMobileButtons[item.path]
+                        if active and active.stroke then
+                            active.stroke.Enabled = isOn
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- PC Keybind Listener
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local path = _G.Keybinds[input.KeyCode]
+        if path then
+            local reg = _G.ModuleRegistry[path]
+            if reg then
+                if reg.isAction then
+                    reg.toggleFunc()
+                else
+                    reg.toggleFunc(not reg.isOn)
+                end
+            end
+        end
+    end
+end)
+
+-- =========================================================================
+-- 11. INITIALIZATION
+-- =========================================================================
+
+local Test = {name = "Empty Test", items = {}}
+
+-- Build Categories from Data
+BuildCategoryFromData(CombatData)
+BuildCategoryFromData(VisualsData)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+BuildCategoryFromData(Test)
+
+-- Build Shortcuts Tab based on Data
+BuildShortcutsTab()
+
+-- Hall of Fame (Dropdowns + OneTimeButtons)
+local HoF = Toolbox:Category("Hall of Fame")
+
+HoF:Divider("Developer")
+	:OneTimeButton("HanzoRTX", function() end)
+
+HoF:Divider("Friends & Helpers")
+	:OneTimeButton("Lodingglue", function() end)
+	:OneTimeButton("Devyzn", function() end)
+	:OneTimeButton("Nrnqp", function() end)
+	:OneTimeButton("Merci", function() end)
+	:OneTimeButton("Exobox", function() end)
+	:OneTimeButton("TacoTaco / TacoClient Dev", function() end)
+
+HoF:Divider("Credits")
+	:OneTimeButton("MrArm", function() end)
+	:OneTimeButton("ReClient", function() end)
+	:OneTimeButton("Novie", function() end)
+
+-- Initial Load
+if Toolbox.Categories[1] then
+    local btn = Toolbox.Categories[1].Button
+    Toolbox.ActiveCategory = Toolbox.Categories[1]
+    btn.BackgroundColor3 = SELECTED_COLOR
+    btn.BackgroundTransparency = 0
+    RegisterRGB(btn, "Background")
+    for _, e in ipairs(Toolbox.Categories[1].Elements) do e.Visible = true end
+end
+
+-- Settings Items
+local rgbModule, rgbApi = createModule("LGBTQ Mode", false, true, function(isOn)
+    _G.RGB_Enabled = isOn
+end)
+rgbModule.Parent = SettingsScroll
+rgbApi:Slider("Speed", 1, 100, 20, 1, function(v) _G.RGB_Speed = v/2 end) -- Faster Scaling
+
+createModule("Animations", true, true, function(isOn)
+    _G.Animations_Enabled = isOn
+end).Parent = SettingsScroll
+
+local restoreSlider = createSlider("Restore Opacity", 0, 100, 80, 5, function(v)
+    local t = 1-(v/100)
+    Restore.BackgroundTransparency = t
+    local i = Restore:FindFirstChildOfClass("ImageLabel")
+    if i then i.ImageTransparency = t end
+end)
+restoreSlider.Parent = SettingsScroll
+
+-- RGB Loop
+RunService.Heartbeat:Connect(function()
+    local target = SELECTED_COLOR
+    local textTarget = SELECTED_TEXT_COLOR
+    if _G.RGB_Enabled then
+        -- Use global speed
+        local hue = (tick() * _G.RGB_Speed) % 1
+        target = Color3.fromHSV(hue, 1, 1)
+        textTarget = target
+    end
+    
+    for i, def in pairs(_G.RGBObjects.Backgrounds) do 
+		if i.Parent then 
+			if _G.RGB_Enabled then i.BackgroundColor3 = target 
+			else i.BackgroundColor3 = def end
+		else _G.RGBObjects.Backgrounds[i]=nil end 
+	end
+    for i, def in pairs(_G.RGBObjects.Texts) do 
+		if i.Parent then 
+			if _G.RGB_Enabled then i.TextColor3 = textTarget 
+			else i.TextColor3 = def end
+		else _G.RGBObjects.Texts[i]=nil end 
+	end
+    for i, def in pairs(_G.RGBObjects.Strokes) do 
+		if i.Parent then 
+			if _G.RGB_Enabled then i.Color = target 
+			else i.Color = def end
+		else _G.RGBObjects.Strokes[i]=nil end 
+	end
+end)
+
+-- Min/Restore
+local isMin = false
+local PosCache = {
+	Main = MainPlate.Position,
+	Link = LinkPlate.Position,
+	Cat = CatListPlate.Position,
+	Mod = ModulePlate.Position,
+	Logo = LogoPlate.Position,
+	Min = MinPlate.Position
+}
+
+local function createSlideTween(instance, originalPos, isClosing)
+    local targetPos
+    if isClosing then
+        targetPos = UDim2.fromOffset(-DESIGN_WIDTH - 120, originalPos.Y.Offset)
+    else
+        targetPos = UDim2.fromOffset(originalPos.X.Offset, originalPos.Y.Offset)
+    end
+
+    local duration = getAnimSpeed()
+    local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    return TweenService:Create(instance, info, {Position = targetPos})
+end
+
+MinButton.MouseButton1Click:Connect(function()
+    if isMin then return end
+    isMin = true
+    
+    createSlideTween(MainPlate, PosCache.Main, true):Play()
+    createSlideTween(LinkPlate, PosCache.Link, true):Play()
+    createSlideTween(CatListPlate, PosCache.Cat, true):Play()
+    createSlideTween(ModulePlate, PosCache.Mod, true):Play()
+    createSlideTween(LogoPlate, PosCache.Logo, true):Play()
+    createSlideTween(MinPlate, PosCache.Min, true):Play()
+
+    -- If animations off, hide instantly. Else wait for slide
+    local delayTime = getAnimSpeed() > 0 and getAnimSpeed() or 0
+    task.delay(delayTime, function() Restore.Visible = true end)
+end)
+
+Restore.MouseButton1Click:Connect(function()
+    if not isMin then return end
+    isMin = false
+    Restore.Visible = false
+    
+    createSlideTween(MainPlate, PosCache.Main, false):Play()
+    createSlideTween(LinkPlate, PosCache.Link, false):Play()
+    createSlideTween(CatListPlate, PosCache.Cat, false):Play()
+    createSlideTween(ModulePlate, PosCache.Mod, false):Play()
+    createSlideTween(LogoPlate, PosCache.Logo, false):Play()
+    createSlideTween(MinPlate, PosCache.Min, false):Play()
+end)
+
+-- Restore Button Drag
+local d, sPos, dStart
+Restore.InputBegan:Connect(function(i) 
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
+		d = true; sPos = Restore.Position; dStart = i.Position 
+	end 
+end)
+UserInputService.InputChanged:Connect(function(i) 
+	if d and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then 
+		local delta = i.Position - dStart
+		local newX = sPos.X.Offset + delta.X
+		local newY = sPos.Y.Offset + delta.Y
+		local maxX = math.max(0, DESIGN_WIDTH - Restore.AbsoluteSize.X)
+		local maxY = math.max(0, DESIGN_HEIGHT - Restore.AbsoluteSize.Y)
+		newX = math.clamp(newX, 0, maxX)
+		newY = math.clamp(newY, 0, maxY)
+		Restore.Position = UDim2.fromOffset(newX, newY) 
+	end 
+end)
+UserInputService.InputEnded:Connect(function(i) 
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
+		d = false 
+	end 
+end)
+
+print("Toolbox Loaded - White Headers")
